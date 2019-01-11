@@ -38,7 +38,8 @@ For the correct conversion from timestamp in log to frame # in video:
 '''
 
 
-import os, glob
+import os
+import glob
 import pandas as pd
 import numpy as np
 import torch
@@ -55,9 +56,6 @@ class IntuitiveSimulated(Dataset):
         self.split = split
         self.dataset = self.create_dataset()
 
-
-
-
     def create_dataset(self):
 
         # Crawl through dataset to get paths
@@ -65,10 +63,10 @@ class IntuitiveSimulated(Dataset):
         all_videos = sorted(glob.glob('{}/Recorded/*/video_files/*/left.avi'.format(BASE_PATH)))
         for vid in all_videos:
             all_paths.append({
-                'video_path':   vid,
-                'ts_path':      vid.replace("left.avi", "left_avi_ts.txt"),
-                'phase_path':   vid.replace("video_files", "log_files").replace("left.avi", "ProgressLog.txt"),
-                'events_path':  vid.replace("video_files", "log_files").replace("left.avi", "SimEvents.txt"),
+                'video_path': vid,
+                'ts_path': vid.replace("left.avi", "left_avi_ts.txt"),
+                'phase_path': vid.replace("video_files", "log_files").replace("left.avi", "ProgressLog.txt"),
+                'events_path': vid.replace("video_files", "log_files").replace("left.avi", "SimEvents.txt"),
             })
 
         def get_video_phases(phase_path, ts_path):
@@ -105,33 +103,22 @@ class IntuitiveSimulated(Dataset):
                 'phase': None,
             })
 
-
-
-
-
-
-
-
-
     def __len__(self):
         return len(self.df_dataset)
-
-
-
 
     def image_transforms(self, numpy_images):
         """ Transformations on a list of images """
 
         # Get random parameters to apply same transformation to all images in list
-        color_jitter = transforms.ColorJitter.get_params(.25,.25,.25,.25)
-        rotation_param = transforms.RandomRotation.get_params((-15,15))
+        color_jitter = transforms.ColorJitter.get_params(.25, .25, .25, .25)
+        rotation_param = transforms.RandomRotation.get_params((-15, 15))
         flip_param = random.random()
 
         # Apply transformations
         images = []
         for numpy_image in numpy_images:
             i = transforms.functional.to_pil_image(numpy_image)
-            i = transforms.functional.resize(i, (224,224))
+            i = transforms.functional.resize(i, (224, 224))
             if self.train:
                 i = color_jitter(i)
                 i = transforms.functional.rotate(i, rotation_param)
@@ -142,17 +129,11 @@ class IntuitiveSimulated(Dataset):
             images.append(i)
         return torch.stack(images)
 
-
-
-
     def pad_or_trim(self, torch_array, bound):
         if torch_array.size(0) <= bound:
             return torch.cat([torch_array, torch.zeros([bound - torch_array.size(0), 3, 224, 224])])
 
         return torch_array[:bound]
-
-
-
 
     def __getitem__(self, idx):
         # Max num images
@@ -165,10 +146,10 @@ class IntuitiveSimulated(Dataset):
 
         # Load images
         raw_images = []
-        for x in range(row['frame_first'], min(row['frame_last'], row['frame_first']+bound)):
+        for x in range(row['frame_first'], min(row['frame_last'], row['frame_first'] + bound)):
             im_path = "{}/frame{:08}.jpg".format(image_directory, x)
             try:
-                raw_images.append(cv2.imread(im_path)[:,:,::-1])
+                raw_images.append(cv2.imread(im_path)[:, :, ::-1])
             except TypeError:
                 # print(row)
                 print(im_path)
@@ -198,7 +179,6 @@ class IntuitiveSimulated(Dataset):
         label = row['event_id']
 
         return padded_images, label
-
 
 
 if __name__ == '__main__':

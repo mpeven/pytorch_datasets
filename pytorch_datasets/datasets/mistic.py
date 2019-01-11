@@ -56,17 +56,11 @@ import torch
 import torchvision
 
 
-
-
-
 def pil_loader(path):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
         img = Image.open(f)
         return img.convert('RGB')
-
-
-
 
 
 class MISTIC(torch.utils.data.Dataset):
@@ -81,8 +75,8 @@ class MISTIC(torch.utils.data.Dataset):
         if not self._check_exists():
             raise RuntimeError('Dataset not found at {}'.format(root))
         if not self._check_frames_exists():
-            if click.confirm("Do you want convert the MISTIC .avi video files to images? " +
-                                 "(takes 59GB of space)"):
+            if click.confirm("Do you want convert the MISTIC .avi video files to images? "
+                             + "(takes 59GB of space)"):
                 self.extract_video_frames()
 
         # Collect the dataset
@@ -98,26 +92,14 @@ class MISTIC(torch.utils.data.Dataset):
         # Filter or add information to dataset
         # self.split_labels_in_two()
 
-
-
-
-
-
     def _check_exists(self):
         return os.path.isdir(self.root) and \
-               os.path.isdir(self.root + "/meta_files") and \
-               (os.path.isdir(self.root + "/motion_files") or os.path.isdir(self.root + "/video_files"))
-
-
-
+            os.path.isdir(self.root + "/meta_files") and \
+            (os.path.isdir(self.root + "/motion_files") or os.path.isdir(self.root + "/video_files"))
 
     def _check_frames_exists(self):
         return os.path.isdir(self.video_frames_location) and \
-               (len(os.listdir(self.video_frames_location)) == 396)
-
-
-
-
+            (len(os.listdir(self.video_frames_location)) == 396)
 
     def extract_video_frames(self):
         # Make folder for extraction
@@ -147,16 +129,12 @@ class MISTIC(torch.utils.data.Dataset):
             )
             subprocess.call(cmd, shell=True)
 
-
-
-
-
     def create_dataset(self):
         '''
         Create MISTIC dataset with the following (per-frame) data:
             'frame', 'trial', 'user', 'maneuver_name', 'maneuver_index'
         '''
-        #### Read all phase-files
+        # Read all phase-files
         phase_dfs = []
         for phase_file in sorted(glob.glob('{}/meta_files/*/maneuvers_framestamp.txt'.format(self.root))):
             df = pd.read_csv(phase_file, names=["frame", "maneuver_index"], sep=" ")
@@ -164,25 +142,21 @@ class MISTIC(torch.utils.data.Dataset):
             phase_dfs.append(df)
         df = pd.concat(phase_dfs)
 
-        #### Add phase-name
+        # Add phase-name
         df = df.merge(pd.read_csv(
             '{}/meta_files/maneuver_names.txt'.format(self.root),
             sep=' ', names=["maneuver_index", "maneuver_name"]
         ))
 
-        #### Add user name
+        # Add user name
         x = sio.loadmat("{}/DataSetMetaInfo.mat".format(self.root))
         t2u = [{
             'trial': x["TrialData"][0][a][-1][0],
-            'user':  int(x["TrialData"][0][a][-2][0][4:6]),
-            } for a in range(len(x["TrialData"][0]))]
+            'user': int(x["TrialData"][0][a][-2][0][4:6]),
+        } for a in range(len(x["TrialData"][0]))]
         df = df.merge(pd.DataFrame(t2u))
 
         return df
-
-
-
-
 
     def set_training_split(self):
         '''
@@ -191,7 +165,7 @@ class MISTIC(torch.utils.data.Dataset):
         '''
 
         # Set the train split users
-        if self.train_users != None:
+        if self.train_users is not None:
             print("MISTIC {} user IDs = {}".format(self.train_split, self.train_users))
         else:
             # Not defined - set defaults
@@ -207,22 +181,18 @@ class MISTIC(torch.utils.data.Dataset):
         # Split the dataset
         self.dataset = self.dataset[self.dataset["user"].isin(self.train_users)].reset_index(drop=True)
 
-
-
-
-
     def group_by_segments(self):
         # Make sure it's sorted first
         self.dataset = self.dataset.sort_values(["trial", "frame"])
 
         # Create unique id to group by
         maneuver_changes = self.dataset["maneuver_index"].diff().ne(0).cumsum()
-        frame_jumps      = self.dataset["frame"].diff().ne(1).cumsum()
+        frame_jumps = self.dataset["frame"].diff().ne(1).cumsum()
         self.dataset["segment_id"] = (maneuver_changes + frame_jumps).diff().ne(0).cumsum()
 
         # Pull out all per-segment data
         segments = []
-        for _,sub_df in self.dataset.groupby(["segment_id"]):
+        for _, sub_df in self.dataset.groupby(["segment_id"]):
             # Make sure segment is truly unique
             if len(sub_df["maneuver_name"].unique()) != 1 or \
                len(sub_df["maneuver_index"].unique()) != 1 or \
@@ -240,16 +210,8 @@ class MISTIC(torch.utils.data.Dataset):
 
         self.dataset = pd.DataFrame(segments)
 
-
-
-
-
     def __len__(self):
         return len(self.dataset)
-
-
-
-
 
     def get_image(self, trial, frame):
         # Load image
@@ -270,13 +232,12 @@ class MISTIC(torch.utils.data.Dataset):
             except FileNotFoundError:
                 os.makedirs(os.path.split(ssd_path)[0])
 
-
         # Transform image
         transforms_train = transforms.Compose([
             transforms.Resize(256),
             transforms.RandomCrop((224, 224)),
             transforms.RandomRotation(30),
-            transforms.ColorJitter(.2,.2,.2,.2),
+            transforms.ColorJitter(.2, .2, .2, .2),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
@@ -287,10 +248,6 @@ class MISTIC(torch.utils.data.Dataset):
         ])
 
         return transforms_train(im) if self.train_split == "train" else transforms_test(im)
-
-
-
-
 
     def __getitem__(self, idx):
         row = self.dataset.iloc[idx]

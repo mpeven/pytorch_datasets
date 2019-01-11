@@ -6,7 +6,6 @@ import numpy as np
 import torch
 
 
-
 class WCVP(torch.utils.data.Dataset):
     dset_location = '/hdd/Datasets/WCVP/'
 
@@ -15,11 +14,10 @@ class WCVP(torch.utils.data.Dataset):
 
     def create_dataset(self):
         dataset = []
-        for annotation_file in tqdm(
-                                    glob.glob(self.dset_location + "*/*.txt"),
+        for annotation_file in tqdm(glob.glob(self.dset_location + "*/*.txt"),
                                     ncols=100,
                                     desc="Creating WCVP dataset"
-                                ):
+                                    ):
             xyz = open(annotation_file, "r").readlines()[3].split()
             dataset.append({
                 'image_file': annotation_file.replace('txt', 'jpg'),

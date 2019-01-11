@@ -8,7 +8,6 @@ import torch
 import pytorch_datasets.utils.cache_manager as cache
 
 
-
 class ObjectNet3D(torch.utils.data.Dataset):
     dset_location = '/hdd/Datasets/ObjectNet3D/'
     dset_cached_location = dset_location + "cached_dataset.pkl"
@@ -18,7 +17,7 @@ class ObjectNet3D(torch.utils.data.Dataset):
 
     def create_dataset(self):
         cached_dset = cache.retreive_from_cache(self.dset_cached_location)
-        if cached_dset != False:
+        if cached_dset is not False:
             return cached_dset
 
         dataset = []
@@ -28,7 +27,7 @@ class ObjectNet3D(torch.utils.data.Dataset):
             except Exception:
                 continue
 
-            for obj in x['record']['objects'][0,0][0]:
+            for obj in x['record']['objects'][0, 0][0]:
                 # Get elevation (or fine-grained elevation if it exists)
                 elevation = obj['viewpoint']['elevation_coarse'][0][0][0][0]
                 if 'elevation' in obj['viewpoint'].dtype.names:
@@ -41,9 +40,8 @@ class ObjectNet3D(torch.utils.data.Dataset):
                     if len(obj['viewpoint']['azimuth'][0][0]) > 0:
                         azimuth = obj['viewpoint']['azimuth'][0][0][0][0]
 
-
                 dataset.append({
-                    'image_file': self.dset_location + "Images/" + x['record']['filename'][0,0][0],
+                    'image_file': self.dset_location + "Images/" + x['record']['filename'][0, 0][0],
                     'object_type': obj['class'][0],
                     'azimuth': azimuth,
                     'elevation': elevation,
@@ -54,7 +52,6 @@ class ObjectNet3D(torch.utils.data.Dataset):
 
         cache.cache(dataset, self.dset_cached_location)
         return dataset
-
 
     def __len__(self):
         return len(self.dataset)

@@ -8,7 +8,6 @@ import torch
 import torchvision
 
 
-
 class EPFL(torch.utils.data.Dataset):
     dset_location = '/hdd/Datasets/EPFL/'
 
@@ -25,7 +24,7 @@ class EPFL(torch.utils.data.Dataset):
             'rotation_dir': [int(x) for x in seq_info[6].split()],
         })
         for seq_idx, row in tqdm(df.iterrows(), ncols=115, desc="Getting EPFL data", total=len(df)):
-            times = open(self.dset_location + "times_{:02d}.txt".format(seq_idx+1), "r").read().split('\n')
+            times = open(self.dset_location + "times_{:02d}.txt".format(seq_idx + 1), "r").read().split('\n')
             times = [datetime.datetime.strptime(x, '%Y:%m:%d %H:%M:%S') for x in times[:-1]]
             total_rotation_time = (times[row['rotation_frames'] - 1] - times[0]).total_seconds()
             front_degree_fraction = (times[row['front_frame'] - 1] - times[0]).total_seconds() / total_rotation_time
@@ -35,8 +34,8 @@ class EPFL(torch.utils.data.Dataset):
                 current_orientation = -90 - (-1 * row['rotation_dir'] * (front_degree_fraction - fraction_through_rotation) * 360)
 
                 dataset.append({
-                    'image_file':  self.dset_location + 'tripod_seq_{:02d}_{:03d}.jpg'.format(seq_idx+1, frame+1),
-                    'source':      'EPFL',
+                    'image_file': self.dset_location + 'tripod_seq_{:02d}_{:03d}.jpg'.format(seq_idx + 1, frame + 1),
+                    'source': 'EPFL',
                     'orientation': current_orientation,
                 })
 
