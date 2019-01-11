@@ -5,7 +5,7 @@ from PIL import Image
 import scipy.io as sio
 import h5py
 import torch
-import utils.cache_manager as cache
+import pytorch_datasets.utils.cache_manager as cache
 
 
 

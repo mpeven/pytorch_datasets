@@ -48,7 +48,7 @@ from torch.utils.data import Dataset
 BASE_PATH = '/hdd/Datasets/Intuitive'
 
 
-class IntuitiveDataset(Dataset):
+class IntuitiveSimulated(Dataset):
     def __init__(self, split):
         if split not in ["train", "val", "test"]:
             raise ValueError("Split must be one of 'train', 'val', 'test'. Get {}".format(split))

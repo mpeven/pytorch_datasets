@@ -5,6 +5,7 @@ from tqdm import tqdm
 from PIL import Image
 import pandas as pd
 import torch
+import torchvision
 
 
 
