@@ -42,7 +42,7 @@ print(dset.__getitem__(0))
 - 3D object locations and orientation in images. 100 object categories, 90,127 images, 201,888 objects total in these images.
 - [Website](http://cvgl.stanford.edu/projects/objectnet3d/), [Paper](http://cvgl.stanford.edu/papers/xiang_eccv16.pdf)
 
-### MISTIC
+### MISTIC-SL
 
 - RGB videos of surgeons performing a running suture on a phantom.
 - [Website](https://projects.lcsr.jhu.edu/hmm/main/index.php/DataSets/MISTIC)
