@@ -60,13 +60,6 @@ import torchvision
 from pytorch_datasets.dataset import DataSet
 
 
-def pil_loader(path):
-    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
-    with open(path, 'rb') as f:
-        img = Image.open(f)
-        return img.convert('RGB')
-
-
 class MISTIC(DataSet):
     """ Can specify train users with the 'train_users' parameter. Otherwise it uses the default """
     def __init__(self, root, train_split, train_users=None, transforms=None):
