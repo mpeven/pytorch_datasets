@@ -4,7 +4,7 @@ MISTIC dataset
 Dataset Information
 -------------------
 Contains videos of surgeons performing a running suture on a phantom.
-Annotations include the current phase/task (Suturing, Knot Tying, etc.)
+Annotations include the current maneuver/task (Suturing, Knot Tying, etc.)
 More info here: https://projects.lcsr.jhu.edu/hmm/main/index.php/DataSets/MISTIC
 
 
@@ -49,11 +49,15 @@ User, Trial data
 import os
 import glob
 import click
+from tqdm import tqdm
 import subprocess
 import scipy.io as sio
 import pandas as pd
+import numpy as np
+from PIL import Image
 import torch
 import torchvision
+from pytorch_datasets.dataset import DataSet
 
 
 def pil_loader(path):
@@ -63,13 +67,14 @@ def pil_loader(path):
         return img.convert('RGB')
 
 
-class MISTIC(torch.utils.data.Dataset):
-    def __init__(self, root, train_split, train_users=None, per_frame=False):
+class MISTIC(DataSet):
+    """ Can specify train users with the 'train_users' parameter. Otherwise it uses the default """
+    def __init__(self, root, train_split, train_users=None, transforms=None):
+        super().__init__(transforms)
         self.root = root
-        self.video_frames_location = "{}/video_frames".format(root)
+        self.video_frames_location = os.path.join(root, 'video_frames')
         self.train_split = train_split
-        self.train_users = train_users
-        self.per_frame = per_frame
+        self.train_users = self.get_training_split(train_users)
 
         # Make sure dataset is good to go
         if not self._check_exists():
@@ -79,18 +84,75 @@ class MISTIC(torch.utils.data.Dataset):
                              + "(takes 59GB of space)"):
                 self.extract_video_frames()
 
-        # Collect the dataset
-        self.dataset = self.create_dataset()
+        # Get maneuver index to name dict
+        self.idx_to_name = self.get_index_to_name_dict()
 
-        # Group into segments
-        if not per_frame:
-            self.group_by_segments()
+        # Create dataset
+        self.dataset = self.get_all_trials()
 
-        # Set the training split
-        self.set_training_split()
+        # Add users and remove those not in split
+        self.dataset = self.add_user_id(self.dataset)
+        self.dataset = [x for x in self.dataset if x['user_id'] in self.train_users]
 
-        # Filter or add information to dataset
-        # self.split_labels_in_two()
+        # Add maneuvers and kinematics
+        self.dataset = self.add_maneuver_annotations(self.dataset)
+        self.dataset = self.add_kinematics(self.dataset)
+
+    def get_index_to_name_dict(self):
+        # Create dictionary of label index to value
+        idx_to_name_file = os.path.join(self.root, 'meta_files', 'maneuver_names.txt')
+        idx_to_name = pd.read_csv(idx_to_name_file, sep=' ', names=["idx", "name"])
+        idx_to_name = dict(zip(idx_to_name.idx, idx_to_name.name))
+        idx_to_name[0] = 'No_Maneuver'
+        return idx_to_name
+
+    def get_all_trials(self):
+        dataset = []
+        for vid in sorted(os.listdir(os.path.join(self.root, "video_files"))):
+            dataset.append({'trial': vid})
+        return dataset
+
+    def add_maneuver_annotations(self, dataset):
+        for d in dataset:
+            maneuver_file = os.path.join(self.root, 'meta_files', d['trial'], 'maneuvers_framestamp.txt')
+            if not os.path.isfile(maneuver_file):
+                d['contains_maneuver_annotations'] = False
+                continue
+            d['contains_maneuver_annotations'] = True
+            df = pd.read_csv(maneuver_file, names=["frame", "maneuver_index"], sep=" ")
+            d['frames'] = df.frame.values
+            d['maneuver_indices'] = df.maneuver_index.values
+            d['maneuver_names'] = df.maneuver_index.apply(lambda x: self.idx_to_name[x]).values
+        return dataset
+
+    def add_user_id(self, dataset):
+        meta_file = sio.loadmat(os.path.join(self.root, 'DataSetMetaInfo.mat'))
+        trial_to_user = {a[-1][0]: int(a[-2][0][4:6]) for a in meta_file["TrialData"][0]}
+        for d in dataset:
+            d['user_id'] = trial_to_user[d['trial']]
+        return dataset
+
+    def add_kinematics(self, dataset):
+        PSM_USECOLS = [1, 2, 3,
+                       4, 5, 6, 7, 8, 9, 10, 11, 12,
+                       13, 14, 15,
+                       16, 17, 18,
+                       25]
+        PSM_COL_NAMES = ['pos_x', 'pos_y', 'pos_z',
+                         'r00', 'r01', 'r02', 'r10', 'r11', 'r12', 'r20', 'r21', 'r22',
+                         'vel_x', 'vel_y', 'vel_z',
+                         'omega_x', 'omega_y', 'omega_z',
+                         'gripper']
+        for d in tqdm(dataset, ncols=115, desc="Reading motion files"):
+            motion_file = os.path.join(self.root, 'motion_files', d['trial'], 'API-PSM1.txt')
+            if not os.path.isfile(motion_file):
+                d['contains_kinematics'] = False
+                continue
+            d['contains_kinematics'] = True
+            df = pd.read_csv(motion_file, sep=" ", usecols=PSM_USECOLS, names=PSM_COL_NAMES)
+            d.update({col:np.array(val) for col,val in df.to_dict('list').items()})
+
+        return dataset
 
     def _check_exists(self):
         return os.path.isdir(self.root) and \
@@ -129,134 +191,24 @@ class MISTIC(torch.utils.data.Dataset):
             )
             subprocess.call(cmd, shell=True)
 
-    def create_dataset(self):
-        '''
-        Create MISTIC dataset with the following (per-frame) data:
-            'frame', 'trial', 'user', 'maneuver_name', 'maneuver_index'
-        '''
-        # Read all phase-files
-        phase_dfs = []
-        for phase_file in sorted(glob.glob('{}/meta_files/*/maneuvers_framestamp.txt'.format(self.root))):
-            df = pd.read_csv(phase_file, names=["frame", "maneuver_index"], sep=" ")
-            df["trial"] = phase_file.split("/")[-2]
-            phase_dfs.append(df)
-        df = pd.concat(phase_dfs)
-
-        # Add phase-name
-        df = df.merge(pd.read_csv(
-            '{}/meta_files/maneuver_names.txt'.format(self.root),
-            sep=' ', names=["maneuver_index", "maneuver_name"]
-        ))
-
-        # Add user name
-        x = sio.loadmat("{}/DataSetMetaInfo.mat".format(self.root))
-        t2u = [{
-            'trial': x["TrialData"][0][a][-1][0],
-            'user': int(x["TrialData"][0][a][-2][0][4:6]),
-        } for a in range(len(x["TrialData"][0]))]
-        df = df.merge(pd.DataFrame(t2u))
-
-        return df
-
-    def set_training_split(self):
+    def get_training_split(self, train_users):
         '''
         Set the train/test/val split between users in:
             [02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 15, 17, 19, 24, 30, 31]
         '''
 
         # Set the train split users
-        if self.train_users is not None:
-            print("MISTIC {} user IDs = {}".format(self.train_split, self.train_users))
+        if train_users is not None:
+            print("MISTIC {} user IDs = {}".format(self.train_split, train_users))
         else:
             # Not defined - set defaults
             if self.train_split == "train":
-                self.train_users = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]
+                train_users = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]
             elif self.train_split == "val":
-                self.train_users = [5, 8, 10]
+                train_users = [5, 8, 10]
             elif self.train_split == "test":
-                self.train_users = [19, 24, 30, 31]
+                train_users = [19, 24, 30, 31]
             print("MISTIC {} users not specified".format(self.train_split) +
-                  " - using default: {}".format(self.train_users))
+                  " - using default: {}".format(train_users))
 
-        # Split the dataset
-        self.dataset = self.dataset[self.dataset["user"].isin(self.train_users)].reset_index(drop=True)
-
-    def group_by_segments(self):
-        # Make sure it's sorted first
-        self.dataset = self.dataset.sort_values(["trial", "frame"])
-
-        # Create unique id to group by
-        maneuver_changes = self.dataset["maneuver_index"].diff().ne(0).cumsum()
-        frame_jumps = self.dataset["frame"].diff().ne(1).cumsum()
-        self.dataset["segment_id"] = (maneuver_changes + frame_jumps).diff().ne(0).cumsum()
-
-        # Pull out all per-segment data
-        segments = []
-        for _, sub_df in self.dataset.groupby(["segment_id"]):
-            # Make sure segment is truly unique
-            if len(sub_df["maneuver_name"].unique()) != 1 or \
-               len(sub_df["maneuver_index"].unique()) != 1 or \
-               len(sub_df["user"].unique()) != 1 or \
-               len(sub_df["trial"].unique()) != 1:
-                raise RuntimeError("Error combining dataframe")
-            segments.append({
-                'frame_start': min(sub_df["frame"]),
-                'frame_stop': max(sub_df["frame"]),
-                'maneuver_name': sub_df["maneuver_name"].unique()[0],
-                'maneuver_index': sub_df["maneuver_index"].unique()[0],
-                'user': sub_df["user"].unique()[0],
-                'trial': sub_df["trial"].unique()[0],
-            })
-
-        self.dataset = pd.DataFrame(segments)
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def get_image(self, trial, frame):
-        # Load image
-        hdd_path = "{}/video_frames/{}_right/{:05d}.jpg".format(self.root, trial, frame)
-        ssd_path = "/home/mike/Projects/Simulated_Bootstrapping/cached_ims/{}/{:05d}.jpg".format(trial, frame)
-
-        # For MARCC
-        # im = Image.open(hdd_path).copy()
-
-        # # Cached image exists
-        if os.path.isfile(ssd_path):
-            im = pil_loader(ssd_path)
-        else:
-            im = pil_loader(hdd_path)
-            im = transforms.functional.resize(im, (256, 256))
-            try:
-                im.save(ssd_path)
-            except FileNotFoundError:
-                os.makedirs(os.path.split(ssd_path)[0])
-
-        # Transform image
-        transforms_train = transforms.Compose([
-            transforms.Resize(256),
-            transforms.RandomCrop((224, 224)),
-            transforms.RandomRotation(30),
-            transforms.ColorJitter(.2, .2, .2, .2),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-        transforms_test = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-
-        return transforms_train(im) if self.train_split == "train" else transforms_test(im)
-
-    def __getitem__(self, idx):
-        row = self.dataset.iloc[idx]
-
-        return {
-            'image': self.get_image(row['trial'], row['frame']),
-            'user': row['user'],
-            'trial': row['trial'],
-            'frame': row['frame'],
-            'label': row['maneuver_index'],
-            'maneuver_name': row['maneuver_name'],
-        }
+        return train_users
