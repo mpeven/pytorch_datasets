@@ -18,7 +18,7 @@ class DataSet(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        to_return = self.dataset[idx]
+        to_return = self.dataset[idx].copy()
 
         if 'image_file' in to_return:
             to_return['image'] = self.load_image(to_return['image_file'])
