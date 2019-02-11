@@ -165,7 +165,7 @@ class MISTIC(DataSet):
         all_vids = sorted(glob.glob("{}/video_files/*/*.avi".format(self.root)))
 
         # Iterate through all videos and extract frames using ffmpeg
-        vid_iterator = tqdm(iterable=all_vids, ncols=100)
+        vid_iterator = tqdm(iterable=all_vids, ncols=115)
         for vid_path in vid_iterator:
             vid_id = "{}_{}".format(
                 vid_path.split("/")[-2],
@@ -196,7 +196,7 @@ class MISTIC(DataSet):
         else:
             # Not defined - set defaults
             if self.train_split == "train":
-                train_users = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]
+                train_users = [2, 3, 4, 6, 7, 9, 11, 12, 13, 15, 17]
             elif self.train_split == "val":
                 train_users = [5, 8, 10]
             elif self.train_split == "test":

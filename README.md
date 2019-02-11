@@ -46,3 +46,8 @@ print(dset.__getitem__(0))
 
 - RGB videos of surgeons performing a running suture on a phantom.
 - [Website](https://projects.lcsr.jhu.edu/hmm/main/index.php/DataSets/MISTIC)
+
+### JIGSAWS
+
+- RGB videos + kinematics of eight surgeons with different levels of skill performing five repetitions of three elementary surgical tasks on a bench-top model.
+- [Website](https://cirl.lcsr.jhu.edu/research/hmm/datasets/jigsaws_release), [Paper](https://cirl.lcsr.jhu.edu/wp-content/uploads/2015/11/JIGSAWS.pdf)

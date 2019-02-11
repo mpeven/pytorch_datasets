@@ -33,7 +33,7 @@ class Model(torch.nn.Module):
 def epoch(train_mode, description, model, dataloader, optimizer=None, loss_func=None):
     """ Train, validation, or test epoch """
     # Create dataset iterator
-    iterator = tqdm(dataloader, ncols=100, desc=description)
+    iterator = tqdm(dataloader, ncols=115, desc=description)
 
     # Turn off batch norm, etc. during testing/validation
     model = model.train(train_mode)
