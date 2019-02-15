@@ -18,9 +18,9 @@ Dataset Contents:
 * Images: There is a folder corresponding to each demonstration. Inside the folder each frame from the demonstration is rendered and named with the frame number.
 
 '''
-
 import os
 import glob
+import math
 import click
 from tqdm import tqdm
 import subprocess
@@ -28,10 +28,12 @@ import scipy.io as sio
 import pandas as pd
 import numpy as np
 from PIL import Image
+from skimage import io, transform
 import torch
 import torchvision
 from pytorch_datasets.dataset import DataSet
 from pdb import set_trace as woah
+import random
 
 
 class NeedleMaster(DataSet):
@@ -41,7 +43,6 @@ class NeedleMaster(DataSet):
         self.root = root
         self.video_frames_location = os.path.join(root, 'images/')
         self.train_split = train_split
-        self.train_users = self.get_training_split(train_users)
 
         # Make sure dataset is good to go
         if not self._check_exists():
@@ -54,12 +55,55 @@ class NeedleMaster(DataSet):
         self.dataset = self.add_environments(self.dataset)
         # TODO: add a flag to show what the next gate is at each timestamp
 
+    def __len__(self):
+        """ Return the number of elements in the dataset"""
+        return len(self.dataset)
+
+    def __getitem__(self, idx=None, frame_idx=None):
+        """ Return an image from the dataset. If no image is sepecified, return a random frame.
+            Right now onlyan image and the position of the needle are returned.
+            We can augment this as needed.
+
+            Args:
+                idx: the index of the trial in the dataset (int)
+                frame_idx: the frame index to extract the video from (int)
+        """
+        if(idx == None):
+            ''' pick a trial '''
+            idx = random.randint(0, len(self.dataset))
+        trial = self.dataset[idx]['trial'].split('.')[0]
+
+        trial_frames = os.listdir(os.path.join(self.video_frames_location, trial))
+        if(frame_idx == None):
+            ''' pick a frame '''
+            frame_idx = random.randint(1, len(trial_frames) - 1)
+
+        frame = '{:03d}.png'.format(frame_idx)
+
+        img_name = os.path.join(self.video_frames_location, trial, frame)
+        image = io.imread(img_name)
+
+        ''' return needle x y theta position normalized '''
+        needle_x     = self.dataset[idx]['x'][frame_idx]/float(self.dataset[idx]['environment']['width'])
+        needle_y     = self.dataset[idx]['y'][frame_idx]/float(self.dataset[idx]['environment']['height'])
+        needle_theta = self.dataset[idx]['theta'][frame_idx]/(2 * math.pi)
+        needle       = np.array([needle_x, needle_y, needle_theta])
+
+        sample = {'image': image[:,:,0:3], 'needle': needle}
+
+        ''' TODO: add transform code '''
+        if(self.transforms):
+            toPIL = torchvision.transforms.ToPILImage()
+            sample['image'] = self.transforms(toPIL(sample['image']))
+
+        return sample
+
     def get_all_trials(self, environment=None):
         dataset = []
         for vid in sorted(os.listdir(os.path.join(self.root, "demonstrations/"))):
             environment_level = vid.split('_')[1]
-            if(environment==environment_level or environment==None)
-                dataset.append({'trial': vid, 'environment': environment_level})
+            if((environment==environment_level) or (environment==None)):
+                dataset.append({'trial': vid, 'environment_level': environment_level})
         return dataset
 
     def add_demonstrations(self, dataset):
@@ -82,9 +126,12 @@ class NeedleMaster(DataSet):
 
         '''
         for d in dataset:
-            env_file = os.path.join(self.root, 'environments', 'environment_' + d['environment'] + '.txt')
+            env_file = os.path.join(self.root, 'environments', 'environment_' + d['environment_level'] + '.txt')
             env_fil  = open(env_file, 'r')
             env = load_environment(env_fil)
+            d['environment'] = env
+
+        return dataset
 
     def _check_exists(self):
         return os.path.isdir(self.root) and \
@@ -95,27 +142,27 @@ class NeedleMaster(DataSet):
     #     return os.path.isdir(self.video_frames_location) and \
     #         (len(os.listdir(self.video_frames_location)) == 396)
 
-    def get_training_split(self, train_users):
-        '''
-        Set the train/test/val split between users in:
-            [02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 15, 17, 19, 24, 30, 31]
-        '''
+#     def get_training_split(self, train_users):
+#         '''
 
-        # Set the train split users
-        if train_users is not None:
-            print("MISTIC {} user IDs = {}".format(self.train_split, train_users))
-        else:
-            # Not defined - set defaults
-            if self.train_split == "train":
-                train_users = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]
-            elif self.train_split == "val":
-                train_users = [5, 8, 10]
-            elif self.train_split == "test":
-                train_users = [19, 24, 30, 31]
-            print("MISTIC {} users not specified".format(self.train_split) +
-                  " - using default: {}".format(train_users))
 
-        return train_users
+#         '''
+
+#         # Set the train split users
+#         if train_users is not None:
+#             print("MISTIC {} user IDs = {}".format(self.train_split, train_users))
+#         else:
+#             # Not defined - set defaults
+#             if self.train_split == "train":
+#                 train_users = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]
+#             elif self.train_split == "val":
+#                 train_users = [5, 8, 10]
+#             elif self.train_split == "test":
+#                 train_users = [19, 24, 30, 31]
+#             print("MISTIC {} users not specified".format(self.train_split) +
+#                   " - using default: {}".format(train_users))
+
+#         return train_users
 
 
 ''' ------------------------------------------------------

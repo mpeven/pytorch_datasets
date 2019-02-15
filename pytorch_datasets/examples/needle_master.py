@@ -14,3 +14,4 @@ from pdb import set_trace as woah
 
 ''' ------------------------------------- '''
 nm_dataset = pytorch_datasets.NeedleMaster('/home/molly/workspace/Surgical_Automation/experiments/needle_master_tools/', train_split=None)
+woah()
