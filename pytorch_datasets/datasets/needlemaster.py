@@ -1,4 +1,5 @@
 '''
+ss_func(outputs.double(), torch.LongTensor(needle))
 Needle Master Dataset
 
 Dataset Information
@@ -38,11 +39,12 @@ import random
 
 class NeedleMaster(DataSet):
     """ Can specify train users with the 'train_users' parameter. Otherwise it uses the default """
-    def __init__(self, root, train_split, train_users=None, transforms=None):
+    def __init__(self, root, train_split, train_users=None, transforms=None, discrete=False):
         super().__init__(transforms)
         self.root = root
         self.video_frames_location = os.path.join(root, 'images/')
         self.train_split = train_split
+        self.discrete = discrete
 
         # Make sure dataset is good to go
         if not self._check_exists():
@@ -87,6 +89,12 @@ class NeedleMaster(DataSet):
         needle_x     = self.dataset[idx]['x'][frame_idx]/float(self.dataset[idx]['environment']['width'])
         needle_y     = self.dataset[idx]['y'][frame_idx]/float(self.dataset[idx]['environment']['height'])
         needle_theta = self.dataset[idx]['theta'][frame_idx]/(2 * math.pi)
+
+        if(self.discrete):
+            needle_x = np.int(np.round(needle_x * 9)) # a way to make 10 classes -- the output can be 0:9
+            needle_y = np.int(np.round(needle_y * 9))
+            needle_theta = np.int(np.round(needle_theta * 9))
+
         needle       = np.array([needle_x, needle_y, needle_theta])
 
         sample = {'image': image[:,:,0:3], 'needle': needle}
