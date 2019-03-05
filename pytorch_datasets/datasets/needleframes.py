@@ -5,13 +5,14 @@ Needle Master Dataset
 Dataset Information
 -------------------
 
-Demonstrations from the NeedleMaster Android game developped by Chris Paxton. Code for the game is available here https://github.com/cpaxton/needle_master_tools.
+Image frames from demonstrations from the NeedleMaster Android game developped by Chris Paxton. Code for the game is available here https://github.com/cpaxton/needle_master_tools.
 The game simulates a suturing task with a needle the user controls with a touch screen, gates to pass the needle through, and tissue. The goal is to pass the needle through all the gates
 while inflicting the minimal amount of tissue damage.
 
+NOTE: one dataset element is one image frame/one x timestamp  (to access demonstrations see needlemaster.py)
+
 Location: right now it is on Molly's desktop -- can we move it to the LCSR share?
 
-NOTE: one dataset element is one demonstration with multiple image frames, positions, actions etc. (to access frames individually look at needleframes.py)
 
 Dataset Contents:
 -----------------
@@ -40,32 +41,28 @@ from pdb import set_trace as woah
 import random
 
 
-class NeedleMaster(DataSet):
+class NeedleFrames(DataSet):
     """ Can specify train users with the 'train_users' parameter. Otherwise it uses the default """
     def __init__(self, root, environment=None, transforms=None, discrete=False):
         super().__init__(transforms)
-        self.root = root
+        self.root                  = root
         self.video_frames_location = os.path.join(root, 'images/')
-        self.discrete = discrete
-        self.environment = environment
+        self.discrete              = discrete
+        self.environment           = environment
 
         # Make sure dataset is good to go
         if not self._check_exists():
             raise RuntimeError('Dataset not found at {}'.format(root))
 
-        self.dataset = self.get_all_demos(environment)
-        # Add maneuvers and kinematics
-        self.dataset = self.add_demonstrations(self.dataset)
+
+        self.dataset = self.get_all_frames(environment) # NOTE: here we also load the action/needle positions
         self.dataset = self.add_environments(self.dataset)
-
-        # TODO: add a flag to show what the next gate is at each timestamp
-
 
     def __len__(self):
         """ Return the number of elements in the dataset"""
         return len(self.dataset)
 
-    def __getitem__(self, idx=None, frame_idx=None):
+    def __getitem__(self, idx=None):
         """ Return an image from the dataset. If no image is sepecified, return a random frame.
             Right now onlyan image and the position of the needle are returned.
             We can augment this as needed.
@@ -77,12 +74,9 @@ class NeedleMaster(DataSet):
         if(idx == None):
             ''' pick a trial '''
             idx = random.randint(0, len(self.dataset))
-        trial = self.dataset[idx]['trial'].split('.')[0]
 
-        trial_frames = os.listdir(os.path.join(self.video_frames_location, trial))
-        if(frame_idx == None):
-            ''' pick a frame '''
-            frame_idx = random.randint(1, len(trial_frames) - 1)
+        trial = self.dataset[idx]['trial'].split('.')[0]
+        frame_idx = self.dataset[idx]['frame']
 
         frame = '{:03d}.png'.format(frame_idx)
 
@@ -90,9 +84,9 @@ class NeedleMaster(DataSet):
         image = io.imread(img_name)
 
         ''' return needle x y theta position normalized '''
-        needle_x     = self.dataset[idx]['x'][frame_idx]/float(self.dataset[idx]['environment']['width'])
-        needle_y     = self.dataset[idx]['y'][frame_idx]/float(self.dataset[idx]['environment']['height'])
-        needle_theta = self.dataset[idx]['theta'][frame_idx]/(2 * math.pi)
+        needle_x     = self.dataset[idx]['x']/float(self.dataset[idx]['environment']['width'])
+        needle_y     = self.dataset[idx]['y']/float(self.dataset[idx]['environment']['height'])
+        needle_theta = self.dataset[idx]['theta']/(2 * math.pi)
 
         if(self.discrete):
             needle_x = np.int(np.round(needle_x * 9)) # a way to make 10 classes -- the output can be 0:9
@@ -110,28 +104,28 @@ class NeedleMaster(DataSet):
 
         return sample
 
-    def get_all_demos(self, environment=None):
+    def get_all_frames(self, environment=None):
         '''
-            add one entry for each demonstration --- can randomly or sequentially load frames
+            add one entry for each image in each demonstration
         '''
         dataset = []
         for vid in sorted(os.listdir(os.path.join(self.root, "demonstrations/"))):
             environment_level = vid.split('_')[1]
             if((environment==environment_level) or (environment==None)):
-                dataset.append({'trial': vid, 'environment_level': environment_level})
-        return dataset
+                demo_file = os.path.join(self.root, 'demonstrations', vid)
+                df = pd.read_csv(demo_file, names=["t", "x", "y", "theta", "dX", "dtheta"], sep=",")
+                t      = df.t.values
+                x      = df.x.values
+                y      = df.y.values
+                theta  = df.theta.values
+                dX     = df.dX.values
+                dtheta = df.dtheta.values
 
-    def add_demonstrations(self, dataset):
-        for d in dataset:
-            demo_file = os.path.join(self.root, 'demonstrations', d['trial'])
-            df = pd.read_csv(demo_file, names=["t", "x", "y", "theta", "dX", "dtheta"], sep=",")
-            d['t']      = df.t.values
-            d['x']      = df.x.values
-            d['y']      = df.y.values
-            d['theta']  = df.theta.values
-            d['dX']     = df.dX.values
-            d['dtheta'] = df.dtheta.values
-
+                for frame in sorted(os.listdir(os.path.join(self.video_frames_location, vid.split('.')[0]))):
+                    idx = np.int(frame.split('.')[0])
+                    if(idx < len(t)):
+                        dataset.append({'trial': vid, 'environment_level': environment_level, 'frame': idx, 't': t[idx], 'x': x[idx], 'y': y[idx], 'theta': theta[idx], \
+                        'dX': dX[idx], 'dtheta': dtheta[idx]})
         return dataset
 
     def add_environments(self, dataset):
@@ -153,31 +147,6 @@ class NeedleMaster(DataSet):
             os.path.isdir(self.root + "/environments") and \
             (os.path.isdir(self.root + "/demonstrations") and os.path.isdir(self.root + "/images"))
 
-    # def _check_frames_exists(self):
-    #     return os.path.isdir(self.video_frames_location) and \
-    #         (len(os.listdir(self.video_frames_location)) == 396)
-
-#     def get_training_split(self, train_users):
-#         '''
-
-
-#         '''
-
-#         # Set the train split users
-#         if train_users is not None:
-#             print("MISTIC {} user IDs = {}".format(self.train_split, train_users))
-#         else:
-#             # Not defined - set defaults
-#             if self.train_split == "train":
-#                 train_users = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]
-#             elif self.train_split == "val":
-#                 train_users = [5, 8, 10]
-#             elif self.train_split == "test":
-#                 train_users = [19, 24, 30, 31]
-#             print("MISTIC {} users not specified".format(self.train_split) +
-#                   " - using default: {}".format(train_users))
-
-#         return train_users
 
 
 ''' ------------------------------------------------------
