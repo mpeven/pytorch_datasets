@@ -49,6 +49,8 @@ class NeedleFrames(DataSet):
         self.video_frames_location = os.path.join(root, 'images/')
         self.discrete              = discrete
         self.environment           = environment
+        if(environment == None):
+            print('Warning: no environment was specified. Will load all levels except 14 for training.')
 
         # Make sure dataset is good to go
         if not self._check_exists():
@@ -111,7 +113,7 @@ class NeedleFrames(DataSet):
         dataset = []
         for vid in sorted(os.listdir(os.path.join(self.root, "demonstrations/"))):
             environment_level = vid.split('_')[1]
-            if((environment==environment_level) or (environment==None)):
+            if((environment==environment_level) or ((environment==None)and(environment_level is not '14'))):
                 demo_file = os.path.join(self.root, 'demonstrations', vid)
                 df = pd.read_csv(demo_file, names=["t", "x", "y", "theta", "dX", "dtheta"], sep=",")
                 t      = df.t.values
